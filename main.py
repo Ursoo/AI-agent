@@ -9,6 +9,7 @@ from functions.get_files_info import schema_get_files_info
 from functions.write_file import schema_write_file
 from functions.get_file_content import schema_get_file_content
 from functions.run_python_file import schema_run_python_file
+from functions.call_function import call_function
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -36,16 +37,20 @@ def run():
 
 
 def main():
-
+    verbose = False if "--verbose" not in sys.argv else True
     response = run()
-    if "--verbose" in sys.argv:
+    if verbose:
         print(f"User prompt: {prompt}")
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(
             f"Response tokens: {response.usage_metadata.candidates_token_count}")
     if response.function_calls:
         for function_call_part in response.function_calls:
-            print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+            function_result = call_function(function_call_part= function_call_part, verbose= verbose)
+            if not function_result.parts[0].function_response.response:
+                raise Exception("Fatal Error: Something went extremely wrong. No response was generated.")
+            elif response:
+                print(f"-> {function_result.parts[0].function_response.response}")
     else:
         print(response.text)
 
