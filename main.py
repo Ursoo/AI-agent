@@ -18,8 +18,7 @@ client = genai.Client(api_key=api_key)
 if len(sys.argv) == 1:
     print("please provide a prompt")
     exit(1)
-prompt = sys.argv[1]
-messages = [types.Content(role="user", parts=[types.Part(text=prompt)])]
+
 available_functions = types.Tool(
     function_declarations=[
         schema_get_files_info,
@@ -31,28 +30,44 @@ available_functions = types.Tool(
 
 
 def run():
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001", contents=messages, config= types.GenerateContentConfig(tools=[available_functions], system_instruction=SYSTEM_PROMPT))
-    return response
+    prompt = sys.argv[1]
+    messages = [types.Content(role="user", parts=[types.Part(text=prompt)])]
+    verbose = False if "--verbose" not in sys.argv else True
+
+    for i in range(0, 21):
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-001", contents=messages, config=types.GenerateContentConfig(tools=[available_functions], system_instruction=SYSTEM_PROMPT))
+
+        if verbose:
+            print(f"User prompt: {prompt}")
+            print(
+                f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+            print(
+                f"Response tokens: {response.usage_metadata.candidates_token_count}")
+
+        if response.candidates:
+            for candidate in response.candidates:
+                messages.append(candidate.content)
+
+        if response.function_calls:
+            for function_call_part in response.function_calls:
+                function_result = call_function(
+                    function_call_part=function_call_part, verbose=verbose)
+                if not function_result.parts[0].function_response.response:
+                    raise Exception(
+                        "Fatal Error: Something went extremely wrong. No response was generated.")
+                elif response:
+                    messages.append(types.Content(role="user", parts=[types.Part(
+                        text=function_result.parts[0].function_response.response["result"])]))
+                    print(
+                        f"-> {function_result.parts[0].function_response.response}")
+        else:
+            return response
 
 
 def main():
-    verbose = False if "--verbose" not in sys.argv else True
     response = run()
-    if verbose:
-        print(f"User prompt: {prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(
-            f"Response tokens: {response.usage_metadata.candidates_token_count}")
-    if response.function_calls:
-        for function_call_part in response.function_calls:
-            function_result = call_function(function_call_part= function_call_part, verbose= verbose)
-            if not function_result.parts[0].function_response.response:
-                raise Exception("Fatal Error: Something went extremely wrong. No response was generated.")
-            elif response:
-                print(f"-> {function_result.parts[0].function_response.response}")
-    else:
-        print(response.text)
+    print(response.text)
 
 
 if __name__ == "__main__":
